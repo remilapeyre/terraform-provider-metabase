@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"net/http"
+	"os"
 
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -73,9 +74,10 @@ While most Terraform resources fully define the Metabase objects using attribute
 				Optional:            true,
 				Sensitive:           true,
 			},
-			"tls": schema.SingleNestedAttribute{
+		},
+		Blocks: map[string]schema.Block{
+			"tls": schema.SingleNestedBlock{
 				MarkdownDescription: "The TLS configuration to use to connect to the Metabase API.",
-				Optional:            true,
 				Attributes: map[string]schema.Attribute{
 					"ca_cert_file": schema.StringAttribute{
 						MarkdownDescription: "The path to a CA certificate file to use to verify the Metabase server's certificate.",
@@ -121,7 +123,7 @@ func (p *MetabaseProvider) Configure(ctx context.Context, req provider.Configure
 	}
 
 	if data.TLS != nil {
-		clientTLSConfig := client.Transport.(*http.Transport).TLSClientConfig
+		clientTLSConfig := &tls.Config{}
 		config := data.TLS
 
 		switch {
@@ -148,8 +150,15 @@ func (p *MetabaseProvider) Configure(ctx context.Context, req provider.Configure
 
 		if !config.CaCertFile.IsNull() {
 			clientTLSConfig.RootCAs = x509.NewCertPool()
-			clientTLSConfig.RootCAs.AppendCertsFromPEM([]byte(config.CaCertFile.ValueString()))
+			caCert, err := os.ReadFile(config.CaCertFile.ValueString())
+			if err != nil {
+				resp.Diagnostics.AddError("Failed to read CA certificate file.", err.Error())
+				return
+			}
+			clientTLSConfig.RootCAs.AppendCertsFromPEM(caCert)
 		}
+
+		client.Transport.(*http.Transport).TLSClientConfig = clientTLSConfig
 	}
 
 	if !data.Username.IsNull() && !data.Password.IsNull() {
