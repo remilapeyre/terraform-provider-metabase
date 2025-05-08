@@ -39,4 +39,17 @@ provider "metabase" {
 
 - `api_key` (String, Sensitive) The API key to use to authenticate. This can be used instead of a user name and password.
 - `password` (String, Sensitive) The password to use to authenticate.
+- `tls` (Attributes) The TLS configuration to use to connect to the Metabase API. (see [below for nested schema](#nestedatt--tls))
 - `username` (String) The user name (or email address) to use to authenticate.
+
+<a id="nestedatt--tls"></a>
+### Nested Schema for `tls`
+
+Optional:
+
+- `ca_cert_dir` (String) The path to a directory containing CA certificate files to use to verify the Metabase server's certificate.
+- `ca_cert_file` (String) The path to a CA certificate file to use to verify the Metabase server's certificate.
+- `client_cert_file` (String) The path to a client certificate file to use to authenticate to the Metabase server.
+- `client_key_file` (String) The path to a client key file to use to authenticate to the Metabase server.
+- `skip_tls_verify` (Boolean) Whether to skip the verification of the Metabase server's certificate.
+- `tls_server_name` (String) The name of the server to verify the certificate against.

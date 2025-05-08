@@ -1,3 +1,9 @@
+### 0.9.0
+
+NEW FEATURES:
+
+- The TLS configuration used to connect to the API can now be customized using the `tls` attribute.
+
 ## 0.8.1 (2024-09-22)
 
 BUG FIXES:

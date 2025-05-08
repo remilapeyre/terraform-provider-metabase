@@ -2,7 +2,11 @@ package provider
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"net/http"
 
+	"github.com/hashicorp/go-cleanhttp"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
@@ -24,10 +28,19 @@ type MetabaseProvider struct {
 
 // The Terraform model for the provider.
 type MetabaseProviderModel struct {
-	Endpoint types.String `tfsdk:"endpoint"` // The URL to the Metabase API.
-	Username types.String `tfsdk:"username"` // The user name (or email address) to use to authenticate.
-	Password types.String `tfsdk:"password"` // The password to use to authenticate.
-	ApiKey   types.String `tfsdk:"api_key"`  // The API key to use to authenticate. This can be used instead of a user name and password.
+	Endpoint types.String      `tfsdk:"endpoint"` // The URL to the Metabase API.
+	Username types.String      `tfsdk:"username"` // The user name (or email address) to use to authenticate.
+	Password types.String      `tfsdk:"password"` // The password to use to authenticate.
+	ApiKey   types.String      `tfsdk:"api_key"`  // The API key to use to authenticate. This can be used instead of a user name and password.
+	TLS      *MetabaseTLSModel `tfsdk:"tls"`      // The TLS configuration to use to connect to the Metabase API.
+}
+
+type MetabaseTLSModel struct {
+	CaCertFile     types.String `tfsdk:"ca_cert_file"`     // The path to a CA certificate file to use to verify the Metabase server's certificate.  // The path to a directory containing CA certificate files to use to verify the Metabase server's certificate.
+	TlsServerName  types.String `tfsdk:"tls_server_name"`  // The name of the server to verify the certificate against.
+	SkipTlsVerify  types.Bool   `tfsdk:"skip_tls_verify"`  // Whether to skip the verification of the Metabase server's certificate.
+	ClientCertFile types.String `tfsdk:"client_cert_file"` // The path to a client certificate file to use to authenticate to the Metabase server.
+	ClientKeyFile  types.String `tfsdk:"client_key_file"`  // The path to a client key file to use to authenticate to the Metabase server.
 }
 
 func (p *MetabaseProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -60,6 +73,36 @@ While most Terraform resources fully define the Metabase objects using attribute
 				Optional:            true,
 				Sensitive:           true,
 			},
+			"tls": schema.SingleNestedAttribute{
+				MarkdownDescription: "The TLS configuration to use to connect to the Metabase API.",
+				Optional:            true,
+				Attributes: map[string]schema.Attribute{
+					"ca_cert_file": schema.StringAttribute{
+						MarkdownDescription: "The path to a CA certificate file to use to verify the Metabase server's certificate.",
+						Optional:            true,
+					},
+					"ca_cert_dir": schema.StringAttribute{
+						MarkdownDescription: "The path to a directory containing CA certificate files to use to verify the Metabase server's certificate.",
+						Optional:            true,
+					},
+					"tls_server_name": schema.StringAttribute{
+						MarkdownDescription: "The name of the server to verify the certificate against.",
+						Optional:            true,
+					},
+					"skip_tls_verify": schema.BoolAttribute{
+						MarkdownDescription: "Whether to skip the verification of the Metabase server's certificate.",
+						Optional:            true,
+					},
+					"client_cert_file": schema.StringAttribute{
+						MarkdownDescription: "The path to a client certificate file to use to authenticate to the Metabase server.",
+						Optional:            true,
+					},
+					"client_key_file": schema.StringAttribute{
+						MarkdownDescription: "The path to a client key file to use to authenticate to the Metabase server.",
+						Optional:            true,
+					},
+				},
+			},
 		},
 	}
 }
@@ -76,6 +119,43 @@ func (p *MetabaseProvider) Configure(ctx context.Context, req provider.Configure
 	var err error
 	var authenticatedClient *metabase.ClientWithResponses
 
+	client := cleanhttp.DefaultPooledClient()
+	opts := []metabase.ClientOption{
+		metabase.WithHTTPClient(client),
+	}
+
+	if data.TLS != nil {
+		clientTLSConfig := client.Transport.(*http.Transport).TLSClientConfig
+		config := data.TLS
+
+		switch {
+		case !config.ClientCertFile.IsNull() && !config.ClientKeyFile.IsNull():
+			clientCert, err := tls.LoadX509KeyPair(config.ClientCertFile.ValueString(), config.ClientKeyFile.ValueString())
+			if err != nil {
+				resp.Diagnostics.AddError("Failed to load client certificate and key.", err.Error())
+				return
+			}
+			clientTLSConfig.Certificates = []tls.Certificate{clientCert}
+
+		case !config.ClientCertFile.IsNull() || !config.ClientKeyFile.IsNull():
+			resp.Diagnostics.AddError("Either both client certificate and key must be provided or none of them.", "")
+			return
+		}
+
+		if config.SkipTlsVerify.ValueBool() {
+			clientTLSConfig.InsecureSkipVerify = true
+		}
+
+		if config.TlsServerName.ValueString() != "" {
+			clientTLSConfig.ServerName = config.TlsServerName.ValueString()
+		}
+
+		if !config.CaCertFile.IsNull() {
+			clientTLSConfig.RootCAs = x509.NewCertPool()
+			clientTLSConfig.RootCAs.AppendCertsFromPEM([]byte(config.CaCertFile.ValueString()))
+		}
+	}
+
 	if !data.Username.IsNull() && !data.Password.IsNull() {
 		if !data.ApiKey.IsNull() {
 			resp.Diagnostics.AddError("Only one of username / password or API key can be provided.", "")
@@ -87,6 +167,7 @@ func (p *MetabaseProvider) Configure(ctx context.Context, req provider.Configure
 			data.Endpoint.ValueString(),
 			data.Username.ValueString(),
 			data.Password.ValueString(),
+			opts...,
 		)
 		if err != nil {
 			resp.Diagnostics.AddError("Failed to create the Metabase client from username and password.", err.Error())
@@ -102,6 +183,7 @@ func (p *MetabaseProvider) Configure(ctx context.Context, req provider.Configure
 			ctx,
 			data.Endpoint.ValueString(),
 			data.ApiKey.ValueString(),
+			opts...,
 		)
 		if err != nil {
 			resp.Diagnostics.AddError("Failed to create the Metabase client from the API key.", err.Error())

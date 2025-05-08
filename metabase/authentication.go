@@ -9,7 +9,7 @@ import (
 
 // Authenticates to the Metabase API using the given username and password, and returns an API client configured with
 // the session obtained during authentication.
-func MakeAuthenticatedClientWithUsernameAndPassword(ctx context.Context, endpoint string, username string, password string) (*ClientWithResponses, error) {
+func MakeAuthenticatedClientWithUsernameAndPassword(ctx context.Context, endpoint string, username string, password string, opts ...ClientOption) (*ClientWithResponses, error) {
 	client, err := NewClientWithResponses(endpoint)
 	if err != nil {
 		return nil, err
@@ -32,7 +32,8 @@ func MakeAuthenticatedClientWithUsernameAndPassword(ctx context.Context, endpoin
 		return nil, err
 	}
 
-	authenticatedClient, err := NewClientWithResponses(endpoint, WithRequestEditorFn(apiKeyProvider.Intercept))
+	opts = append(opts, WithRequestEditorFn(apiKeyProvider.Intercept))
+	authenticatedClient, err := NewClientWithResponses(endpoint, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -41,13 +42,14 @@ func MakeAuthenticatedClientWithUsernameAndPassword(ctx context.Context, endpoin
 }
 
 // Returns an API client configured with the given API key.
-func MakeAuthenticatedClientWithApiKey(ctx context.Context, endpoint string, apiKey string) (*ClientWithResponses, error) {
+func MakeAuthenticatedClientWithApiKey(ctx context.Context, endpoint string, apiKey string, opts ...ClientOption) (*ClientWithResponses, error) {
 	apiKeyProvider, err := securityprovider.NewSecurityProviderApiKey("header", "X-Api-Key", apiKey)
 	if err != nil {
 		return nil, err
 	}
 
-	authenticatedClient, err := NewClientWithResponses(endpoint, WithRequestEditorFn(apiKeyProvider.Intercept))
+	opts = append(opts, WithRequestEditorFn(apiKeyProvider.Intercept))
+	authenticatedClient, err := NewClientWithResponses(endpoint, opts...)
 	if err != nil {
 		return nil, err
 	}
