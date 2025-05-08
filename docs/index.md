@@ -47,7 +47,6 @@ provider "metabase" {
 
 Optional:
 
-- `ca_cert_dir` (String) The path to a directory containing CA certificate files to use to verify the Metabase server's certificate.
 - `ca_cert_file` (String) The path to a CA certificate file to use to verify the Metabase server's certificate.
 - `client_cert_file` (String) The path to a client certificate file to use to authenticate to the Metabase server.
 - `client_key_file` (String) The path to a client key file to use to authenticate to the Metabase server.

@@ -81,10 +81,6 @@ While most Terraform resources fully define the Metabase objects using attribute
 						MarkdownDescription: "The path to a CA certificate file to use to verify the Metabase server's certificate.",
 						Optional:            true,
 					},
-					"ca_cert_dir": schema.StringAttribute{
-						MarkdownDescription: "The path to a directory containing CA certificate files to use to verify the Metabase server's certificate.",
-						Optional:            true,
-					},
 					"tls_server_name": schema.StringAttribute{
 						MarkdownDescription: "The name of the server to verify the certificate against.",
 						Optional:            true,
